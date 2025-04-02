@@ -1,129 +1,70 @@
-#include<stdio.h>
-#include<string.h>
+#include <stdio.h> #include <string.h>
 
-int gcd(int a,int b){
-if(b==0)
-return a;
-else
-gcd(b,a%b);}
+int gcd(int a, int b) { if (b == 0) return a; return gcd(b, a % b); }
 
-int lcm(int a,int b){
-return((a*b)/gcd(a,b));}
+int lcm(int a, int b) { return (a * b) / gcd(a, b); }
 
-int hyperperiod(float period[],int n){
-int k=period[0];
-n–;
-while(n>=1){
-k=lcm(k,period[n–]);}
-return k;}
+int hyperperiod(int period[], int n) { int k = period[0]; for (int i = 1; i < n; i++) { k = lcm(k, period[i]); } return k; }
 
-int edf(float *period,int n,int t,float *deadline){
-int i,small=10000.0f,smallindex=0;
-for(int i=0;i<n;i++){
-if(period[i]<small&&(period[i]-t)<=deadline[i]){
-small=period[i];
-smallindex=i;}}
-if(small==10000.0f)
-return -1;
-return smallindex;}
+int edf(int period[], int n, int t, int deadline[]) { int small = 10000, smallindex = -1; for (int i = 0; i < n; i++) { if (period[i] - t <= deadline[i] && period[i] < small) { small = period[i]; smallindex = i; } } return smallindex; }
 
-int main()
-{
-int i,n,c,d,k,j,nexttime=0,time=0,task,preemption_count;
-float exec[20],period[20],individual_util[20],flag[20],release[20],
-deadline[20],instance[20],ex[20],responsemax[20],responsemin[20],
-tempmax;
-float util=0;
-printf(“\nEarliest Deadline First Algorithm\n”);
+int main() { int i, n, k, time = 0, task, preemption_count = 0; int exec[20], period[20], deadline[20], instance[20] = {0}, ex[100], responsemax[20], responsemin[20]; float util = 0;
 
-FILE *read;
-read=fopen(“Sampledata.docx”,”r”);           // Sampledata
-fscanf(read,”%d “,&n);
-for(i=0;i<n;i++)
-{
-fscanf(read,”%f “,&release[i]);
-fscanf(read,”%f “,&period[i]);
-fscanf(read,”%f “,&exec[i]);
-fscanf(read,”%f “,&deadline[i]);
+printf("\nEarliest Deadline First Algorithm\n");
+FILE *read = fopen("Sampledata.txt", "r");
+if (!read) {
+    printf("Error opening file!\n");
+    return 1;
+}
+
+fscanf(read, "%d", &n);
+for (i = 0; i < n; i++) {
+    fscanf(read, "%d %d %d", &period[i], &exec[i], &deadline[i]);
+    util += (float)exec[i] / period[i];
+    responsemax[i] = exec[i];
+    responsemin[i] = exec[i];
 }
 fclose(read);
-for(i=0;i<n;i++)
-{
-individual_util[i]=exec[i]/period[i];
-util+=individual_util[i];
-responsemax[i]=exec[i];
-deadline[i]=period[i];
-instance[i]=0.0f;
-}
-util=util*100;
-if(util>100)
-printf(“\nUtilisation factor = %0.2f \n\nScheduling
-is not possible as Utilisation factor is above 100 \n”,util);
-else
-{
-printf(“\nUtilisation factor = %0.2f \n\nScheduling is
-possible as Utilisation factor is below 100 \n “,util);
-printf(“\nHyperperiod of the given task set
-is : %d\n\n”,k=hyperperiod(period , n));
-c=0;
-while(time<k)
-{
-nexttime=time+1;
-task = edf(period,n,time,deadline);
-if(task==-1)
-{
-printf(“-“);
-time++;
-continue;
-}
-instance[task]++;
-printf(“T%d “,task);
-ex[c++]=task;
-if(instance[task]==exec[task])
-{
-tempmax=nexttime-(period[task]-deadline[task]);
-if(instance[task]<tempmax)
-{
-responsemax[task]=tempmax;
-}
-else
-{
-responsemin[task]=instance[task];
-}
-if(deadline[task]==k)
-{
-responsemin[task]=responsemax[task];
-}
-period[task]+=deadline[task];
-instance[task]=0.0f;
+
+util *= 100;
+if (util > 100) {
+    printf("\nUtilization factor = %.2f\nScheduling not possible as utilization exceeds 100\n", util);
+    return 0;
 }
 
-time++;
-}
-for(i=0;i<n;i++)
-{
-printf(“\n\nMaximum Response time of Task %d = %f”,i,responsemax[i]);
-printf(“\n\nMinimum Response time of Task %d = %f”,i,responsemin[i]);
+printf("\nUtilization factor = %.2f\nScheduling is possible\n", util);
+printf("\nHyperperiod: %d\n\n", k = hyperperiod(period, n));
+
+while (time < k) {
+    task = edf(period, n, time, deadline);
+    if (task == -1) {
+        printf("- ");
+    } else {
+        printf("T%d ", task);
+        instance[task]++;
+        ex[time] = task;
+        if (instance[task] == exec[task]) {
+            responsemax[task] = time + 1;
+            responsemin[task] = exec[task];
+            period[task] += deadline[task];
+            instance[task] = 0;
+        }
+    }
+    time++;
 }
 
-preemption_count=0;
-for(i=0;i<k;i=j)
-{
-flag[i]=1;
-d=ex[i];
-for(j=i+1;d==ex[j];j++)
-flag[d]++;
-if(flag[d]==exec[d])
-flag[d]=1;
-else
-{
-flag[d]++;
-preemption_count++;
+for (i = 0; i < n; i++) {
+    printf("\nMaximum Response Time of Task %d = %d", i, responsemax[i]);
+    printf("\nMinimum Response Time of Task %d = %d\n", i, responsemin[i]);
 }
+
+for (i = 0; i < k; i++) {
+    if (i > 0 && ex[i] != ex[i - 1]) {
+        preemption_count++;
+    }
 }
-printf(“\n\nPreemption Count = %d”,preemption_count);
-}
+printf("\nPreemption Count = %d\n", preemption_count);
+
 return 0;
+
 }
-
-
