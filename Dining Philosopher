@@ -1,92 +1,133 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <unistd.h>
 
 #define N 5
-#define THINKING 2
-#define HUNGRY 1
-#define EATING 0
-#define LEFT (i + 4) % N
-#define RIGHT (i + 1) % N
-
-int state[N];
-int phil[N] = {0,1,2,3,4};
 
 sem_t mutex;
-sem_t S[N];
+sem_t forks[N];
+int hungry_philosophers[N] = {0};
+int num_hungry = 0;
+int total_philosophers;
+int eating_count = 0; // Track how many are currently eating
 
-void test(int i)
-{
-		if (state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING)
-		{
-			state[i] = EATING;
+void* philosopher_one_at_a_time(void* num) {
+    int i = *(int*)num;
 
-			sleep(2);
+    if (!hungry_philosophers[i]) {
+        return NULL;
+    }
 
-			printf("Philosopher %d takes fork %d and %d\n", i +1, LEFT +1, i +1);
+    printf("P %d is waiting\n", i+1);
 
-			printf("Philosopher %d is Eating\n", i +1);
+    sem_wait(&mutex);
+    printf("P %d is granted to eat\n", i+1);
+    sem_post(&mutex);
 
-			sem_post(&S[i]);
-	}
+    sleep(1); // Simulate eating
+
+    sem_wait(&mutex);
+    printf("P %d has finished eating\n", i+1);
+    sem_post(&mutex);
+
+    return NULL;
 }
 
-void take_fork(int i)
-{
-	sem_wait(&mutex);
-	state[i] = HUNGRY;
-	printf("Philosopher %d is Hungry\n",i+1);
-	test(i);
+void* philosopher_two_at_a_time(void* num) {
+    int i = *(int*)num;
+    int left = i;
+    int right = (i + 1) % total_philosophers;
 
-	sem_post(&mutex);
-	sem_wait(&S[i]);
-	sleep(1);
+    if (!hungry_philosophers[i]) {
+        return NULL;
+    }
+
+    printf("P %d is waiting\n", i+1);
+
+    // Try to pick up forks
+    sem_wait(&mutex);
+    while (eating_count >= 2 ||
+           forks[left] == 0 ||
+           forks[right] == 0) {
+        sem_post(&mutex);
+        usleep(100000); // Sleep briefly to avoid busy waiting
+        sem_wait(&mutex);
+    }
+
+    forks[left] = 0;
+    forks[right] = 0;
+    eating_count++;
+    printf("P %d is granted to eat\n", i+1);
+    sem_post(&mutex);
+
+    sleep(1); // Simulate eating
+
+    sem_wait(&mutex);
+    forks[left] = 1;
+    forks[right] = 1;
+    eating_count--;
+    printf("P %d has finished eating\n", i+1);
+    sem_post(&mutex);
+
+    return NULL;
 }
 
-void put_fork(int i)
-{
-	sem_wait(&mutex);
-	state[i] = THINKING;
+int main() {
+    int choice;
 
-	printf("Philosopher %d putting fork %d and %d down\n",i +1, LEFT +1, i +1);
+    printf("Enter the total number of philosophers: ");
+    scanf("%d", &total_philosophers);
 
-	printf("Philosopher %d is thinking\n", i+1);
-	test(LEFT);
-	test(RIGHT);
-	sem_post(&mutex);
-}
+    printf("How many are hungry: ");
+    scanf("%d", &num_hungry);
 
-void* philosopher(void* num)
-{
+    for (int i = 0; i < num_hungry; i++) {
+        int pos;
+        printf("Enter philosopher %d position (1 to %d): ", i+1, total_philosophers);
+        scanf("%d", &pos);
+        hungry_philosophers[pos-1] = 1;
+    }
 
-	while (1)
-	{
-		int* i = num;
-		sleep(1);
-		take_fork(*i);
-		sleep(0);
-		put_fork(*i);
-	}
-}
+    sem_init(&mutex, 0, 1);
+    for (int i = 0; i < total_philosophers; i++) {
+        sem_init(&forks[i], 0, 1); // Initialize all forks as available
+    }
 
-int main()
-{
-	int i;
-	pthread_t thread_id[N];
+    while (1) {
+        printf("\n1. One can eat at a time\n");
+        printf("2. Two can eat at a time\n");
+        printf("3. Exit\n");
+        printf("Enter your choice: ");
+        scanf("%d", &choice);
 
-	sem_init(&mutex,0,1);
+        if (choice == 3) break;
 
-	for (i =0; i < N; i++)
-		sem_init(&S[i],0,0);
+        pthread_t threads[total_philosophers];
+        int ids[total_philosophers];
 
-	for (i =0; i < N; i++)
-{
-		pthread_create(&thread_id[i], NULL, philosopher, &phil[i]);
-		printf("Philosopher %d is thinking\n", i +1);
-   	}
+        for (int i = 0; i < total_philosophers; i++) {
+            if (hungry_philosophers[i]) {
+                ids[i] = i;
+                if (choice == 1) {
+                    pthread_create(&threads[i], NULL, philosopher_one_at_a_time, &ids[i]);
+                } else if (choice == 2) {
+                    pthread_create(&threads[i], NULL, philosopher_two_at_a_time, &ids[i]);
+                }
+            }
+        }
 
-	for (i =0; i < N; i++)
-	{
-		pthread_join(thread_id[i], NULL);
-	}
+        for (int i = 0; i < total_philosophers; i++) {
+            if (hungry_philosophers[i]) {
+                pthread_join(threads[i], NULL);
+            }
+        }
+    }
+
+    sem_destroy(&mutex);
+    for (int i = 0; i < total_philosophers; i++) {
+        sem_destroy(&forks[i]);
+    }
+
+    return 0;
 }
