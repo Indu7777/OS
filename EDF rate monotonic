@@ -1,115 +1,97 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define MAX_PROCESS 10
 
-typedef struct {
-    int id;
-    int burst_time;
-    float priority;
-} Task;
+int execution_time[MAX_PROCESS], period_or_deadline[MAX_PROCESS], remain_time[MAX_PROCESS];
+int num_of_processes;
 
-int num_of_process;
-int execution_time[MAX_PROCESS], period[MAX_PROCESS], remain_time[MAX_PROCESS], deadline[MAX_PROCESS], remain_deadline[MAX_PROCESS];
-
-void get_process_info(int selected_algo) {
-    printf("Enter total number of processes (maximum %d): ", MAX_PROCESS);
-    scanf("%d", &num_of_process);
-    if (num_of_process < 1) {
+void get_process_info(bool is_deadline_based) {
+    printf("Enter the number of processes (max %d): ", MAX_PROCESS);
+    scanf("%d", &num_of_processes);
+    if (num_of_processes < 1 || num_of_processes > MAX_PROCESS) {
+        printf("Invalid number of processes. Exiting.\n");
         exit(0);
     }
-
-    for (int i = 0; i < num_of_process; i++) {
+    for (int i = 0;i < num_of_processes; i++) {
         printf("\nProcess %d:\n", i + 1);
-        printf("==> Execution time: ");
+        printf("Execution time: ");
         scanf("%d", &execution_time[i]);
         remain_time[i] = execution_time[i];
-
-        if (selected_algo == 2) {
-            printf("==> Deadline: ");
-            scanf("%d", &deadline[i]);
+        if (is_deadline_based) {
+            printf("Deadline: ");
         } else {
-            printf("==> Period: ");
-            scanf("%d", &period[i]);
+            printf("Period: ");
+        }
+        scanf("%d", &period_or_deadline[i]);
+    }
+}
+
+int get_observation_time() {
+    int max_time = period_or_deadline[0];
+    for (int i = 1; i < num_of_processes; i++) {
+        if (period_or_deadline[i] > max_time) {
+            max_time = period_or_deadline[i];
         }
     }
+    return max_time;
 }
-
-int max(int a, int b, int c) {
-    int max = a;
-    if (b > max) max = b;
-    if (c > max) max = c;
-    return max;
-}
-
-int get_observation_time(int selected_algo) {
-    if (selected_algo == 1) {
-        return max(period[0], period[1], period[2]);
-    } else if (selected_algo == 2) {
-        return max(deadline[0], deadline[1], deadline[2]);
-    }
-    return 0;
-}
-
 void print_schedule(int process_list[], int cycles) {
     printf("\nScheduling:\n\n");
     printf("Time: ");
-    for (int i = 0; i < cycles; i++) {
-        if (i < 10)
-            printf("| 0%d ", i);
-        else
-            printf("| %d ", i);
+    for (int i=0;i<cycles;i++)
+    {
+        printf("| %02d ",i);
     }
     printf("|\n");
-
-    for (int i = 0; i < num_of_process; i++) {
+    for(int i=0;i<num_of_processes; i++) {
         printf("P[%d]: ", i + 1);
         for (int j = 0; j < cycles; j++) {
-            if (process_list[j] == i + 1)
+            if (process_list[j] == i + 1) {
                 printf("|####");
-            else
+            } else {
                 printf("|    ");
+            }
         }
         printf("|\n");
     }
 }
-
-void rate_monotonic(int time) {
-    int process_list[100] = {0}, min = 999, next_process = 0;
-    float utilization = 0;
-
-    for (int i = 0; i < num_of_process; i++) {
-        utilization += (1.0 * execution_time[i]) / period[i];
+void rate_monotonic(int time){
+    int process_list[time];
+    float utilization=0;
+    for(int i=0;i<num_of_processes;i++){
+        utilization+=(float)execution_time[i] / period_or_deadline[i];
     }
-
-    float utilization_bound = num_of_process * (pow(2, 1.0 / num_of_process) - 1);
+    float utilization_bound = num_of_processes * (pow(2, 1.0 / num_of_processes) - 1);
 
     if (utilization > utilization_bound) {
-        printf("\nGiven problem is not schedulable under the said scheduling algorithm.\n");
+        printf("\nThe task set is not schedulable under Rate Monotonic Scheduling.\n");
         return;
     }
 
-    for (int i = 0; i < time; i++) {
-        min = 1000;
-        for (int j = 0; j < num_of_process; j++) {
-            if (remain_time[j] > 0) {
-                if (min > period[j]) {
-                    min = period[j];
-                    next_process = j;
-                }
+    for (int t = 0; t< time; t++) {
+        int next_process=-1;
+        int min_period=9999;
+
+        for (int i = 0; i < num_of_processes; i++) {
+            if (remain_time[i] > 0 && period_or_deadline[i] < min_period) {
+                min_period = period_or_deadline[i];
+                next_process = i;
             }
         }
-        if (remain_time[next_process] > 0) {
-            process_list[i] = next_process + 1;
-            remain_time[next_process] -= 1;
+
+        if (next_process != -1) {
+            process_list[t] = next_process + 1;
+            remain_time[next_process]--;
+        } else {
+            process_list[t] = 0;
         }
 
-        for (int k = 0; k < num_of_process; k++) {
-            if ((i + 1) % period[k] == 0) {
-                remain_time[k] = execution_time[k];
-                next_process = k;
+        for (int i = 0; i < num_of_processes; i++) {
+            if ((t + 1) % period_or_deadline[i] == 0) {
+                remain_time[i] = execution_time[i];
             }
         }
     }
@@ -118,75 +100,30 @@ void rate_monotonic(int time) {
 }
 
 void earliest_deadline_first(int time) {
-    float utilization = 0;
-    for (int i = 0; i < num_of_process; i++) {
-        utilization += (1.0 * execution_time[i]) / deadline[i];
-    }
-
-    int n = num_of_process;
-    int process[num_of_process];
-    int max_deadline, current_process = 0, min_deadline, process_list[time];
-    bool is_ready[num_of_process];
-
-    for (int i = 0; i < num_of_process; i++) {
-        is_ready[i] = true;
-        process[i] = i + 1;
-    }
-
-    max_deadline = deadline[0];
-    for (int i = 1; i < num_of_process; i++) {
-        if (deadline[i] > max_deadline)
-            max_deadline = deadline[i];
-    }
-
-    for (int i = 0; i < num_of_process; i++) {
-        for (int j = i + 1; j < num_of_process; j++) {
-            if (deadline[j] < deadline[i]) {
-                int temp = execution_time[j];
-                execution_time[j] = execution_time[i];
-                execution_time[i] = temp;
-                temp = deadline[j];
-                deadline[j] = deadline[i];
-                deadline[i] = temp;
-                temp = process[j];
-                process[j] = process[i];
-                process[i] = temp;
-            }
-        }
-    }
-
-    for (int i = 0; i < num_of_process; i++) {
-        remain_time[i] = execution_time[i];
-        remain_deadline[i] = deadline[i];
-    }
+    int process_list[time];
 
     for (int t = 0; t < time; t++) {
-        if (current_process != -1) {
-            --execution_time[current_process];
-            process_list[t] = process[current_process];
-        } else
-            process_list[t] = 0;
+        int next_process = -1;
+        int min_deadline = 9999;
 
-        for (int i = 0; i < num_of_process; i++) {
-            --deadline[i];
-            if ((execution_time[i] == 0) && is_ready[i]) {
-                deadline[i] += remain_deadline[i];
-                is_ready[i] = false;
-            }
-
-            if ((deadline[i] <= remain_deadline[i]) && !is_ready[i]) {
-                execution_time[i] = remain_time[i];
-                is_ready[i] = true;
+        for (int i = 0; i < num_of_processes; i++) {
+            if (remain_time[i] > 0 && period_or_deadline[i] < min_deadline) {
+                min_deadline = period_or_deadline[i];
+                next_process = i;
             }
         }
 
-        min_deadline = max_deadline;
-        current_process = -1;
+        if (next_process != -1) {
+            process_list[t] = next_process + 1;
+            remain_time[next_process]--;
+        } else {
+            process_list[t] = 0;
+        }
 
-        for (int i = 0; i < num_of_process; i++) {
-            if ((deadline[i] <= min_deadline) && (execution_time[i] > 0)) {
-                current_process = i;
-                min_deadline = deadline[i];
+        for (int i = 0; i < num_of_processes; i++) {
+            if (remain_time[i] == 0) {
+                remain_time[i] = execution_time[i];
+                period_or_deadline[i] += execution_time[i];
             }
         }
     }
@@ -196,26 +133,29 @@ void earliest_deadline_first(int time) {
 
 int main() {
     int option;
-    int observation_time;
+
     while (1) {
         printf("\n1. Rate Monotonic\n2. Earliest Deadline First\n3. Exit\n\nEnter your choice: ");
         scanf("%d", &option);
+
         switch (option) {
-        case 1:
-            get_process_info(option);
-            observation_time = get_observation_time(option);
-            rate_monotonic(observation_time);
-            break;
-        case 2:
-            get_process_info(option);
-            observation_time = get_observation_time(option);
-            earliest_deadline_first(observation_time);
-            break;
-        case 3:
-            exit(0);
-        default:
-            printf("\nInvalid choice\n");
+            case 1:
+                get_process_info(false);
+                rate_monotonic(get_observation_time());
+                break;
+
+            case 2:
+                get_process_info(true);
+                earliest_deadline_first(get_observation_time());
+                break;
+
+            case 3:
+                exit(0);
+
+            default:
+                printf("Invalid choice. Try again.\n");
         }
     }
+
     return 0;
 }
